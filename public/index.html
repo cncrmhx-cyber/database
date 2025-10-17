@@ -1,152 +1,159 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>Katakit Chat Web</title>
-<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-<style>
-  body { font-family: sans-serif; text-align: center; background: #f2f2f2; margin:0; padding:20px; }
-  h2 { color: #e74c3c; }
-  #controls { margin-bottom: 10px; }
-  button { 
-    padding: 10px 15px; margin: 5px; font-size: 16px; cursor: pointer; 
-    border:none; border-radius:5px; background:#3498db; color:white;
-    transition: 0.3s;
-  }
-  button:hover { background:#2980b9; }
-  button.active { background:#2ecc71; }
-  #videos { display: flex; justify-content: center; flex-wrap: wrap; gap:10px; }
-  video { border-radius: 10px; background: #000; display: none; width: 300px; height: 225px; object-fit: cover; }
-</style>
+  <meta charset="UTF-8">
+  <title>Chat Vidéo Katakit</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #f2f2f2; margin:0; padding:20px; }
+    h2 { color: #e74c3c; }
+    #controls { margin-bottom: 10px; }
+    button { 
+      padding: 10px 15px; margin: 5px; font-size: 16px; cursor: pointer; 
+      border:none; border-radius:5px; background:#3498db; color:white;
+      transition: 0.3s;
+    }
+    button:hover { background:#2980b9; }
+    button.active { background:#2ecc71; }
+    #videos { display: flex; justify-content: center; flex-wrap: wrap; gap:10px; }
+    video { border-radius: 10px; background: #000; display: none; width: 300px; height: 225px; object-fit: cover; }
+  </style>
 </head>
 <body>
-<h2><span style='color:red'>K</span>atakit : Chat Web</h2>
+  <h2><span style='color:red'>K</span>atakit : Chat Web</h2>
 
-<div id="controls">
-  <button id="toggle-video">Activer la caméra</button>
-  <button id="toggle-audio">Activer le micro</button>
-</div>
+  <div id="controls">
+    <button id="toggle-video">Activer la caméra</button>
+    <button id="toggle-audio">Activer le micro</button>
+  </div>
 
-<div id="videos"></div>
+  <div id="videos"></div>
 
-<script>
-let localStream = null;
-let videoEnabled = false;
-let audioEnabled = false;
-const peers = {};
-const socket = io();
+  <script>
+    let localStream = null;
+    let videoEnabled = false;
+    let audioEnabled = false;
+    const peers = {};
+    const socket = io();
 
-// STUN pour traverser NAT
-const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+    // Configuration ICE avec serveur TURN public
+    const configuration = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'turn:global.turn.twilio.com:3478?transport=udp',
+          username: 'YOUR_TWILIO_USERNAME',
+          credential: 'YOUR_TWILIO_CREDENTIAL' }
+      ]
+    };
 
-// Room depuis URL : ?room=xxx
-const urlParams = new URLSearchParams(window.location.search);
-const room = urlParams.get('room') || 'general';
+    // Room depuis URL : ?room=xxx
+    const urlParams = new URLSearchParams(window.location.search);
+    const room = urlParams.get('room') || 'general';
 
-// Ajouter une vidéo
-function addVideo(stream, id) {
-  let vid = document.getElementById(id);
-  if (!vid) {
-    vid = document.createElement("video");
-    vid.id = id;
-    vid.autoplay = true;
-    vid.playsInline = true;
-    if (id === "Moi") vid.muted = true;
-    document.getElementById("videos").appendChild(vid);
-  }
-  vid.srcObject = stream;
-  // Affiche la vidéo uniquement si caméra activée pour soi-même
-  vid.style.display = (id === "Moi" && !videoEnabled) ? 'none' : 'inline-block';
-}
-
-// Créer PeerConnection
-function createPeerConnection(id) {
-  const pc = new RTCPeerConnection(configuration);
-  pc.onicecandidate = e => {
-    if (e.candidate) socket.emit("signal", { to: id, data: { candidate: e.candidate } });
-  };
-  pc.ontrack = e => addVideo(e.streams[0], id);
-  return pc;
-}
-
-// Rejoindre room
-socket.emit('join', room);
-
-// Nouveau participant
-socket.on("new-user", id => {
-  const pc = createPeerConnection(id);
-  peers[id] = pc;
-  if (localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-  // Offre initiale
-  pc.createOffer().then(offer => {
-    pc.setLocalDescription(offer);
-    socket.emit("signal", { to: id, data: { sdp: pc.localDescription } });
-  });
-});
-
-// Signaling
-socket.on("signal", async ({ from, data }) => {
-  let pc = peers[from];
-  if (!pc) {
-    pc = createPeerConnection(from);
-    peers[from] = pc;
-    if (localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-  }
-
-  if (data.sdp) {
-    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    if (data.sdp.type === "offer") {
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit("signal", { to: from, data: { sdp: pc.localDescription } });
+    // Ajouter une vidéo
+    function addVideo(stream, id) {
+      let vid = document.getElementById(id);
+      if (!vid) {
+        vid = document.createElement("video");
+        vid.id = id;
+        vid.autoplay = true;
+        vid.playsInline = true;
+        if (id === "Moi") vid.muted = true;
+        document.getElementById("videos").appendChild(vid);
+      }
+      vid.srcObject = stream;
+      // Affiche la vidéo uniquement si caméra activée pour soi-même
+      vid.style.display = (id === "Moi" && !videoEnabled) ? 'none' : 'inline-block';
     }
-  } else if (data.candidate) {
-    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-  }
-});
 
-// Participant quitte
-socket.on("user-left", id => {
-  if (peers[id]) { peers[id].close(); delete peers[id]; document.getElementById(id)?.remove(); }
-});
-
-// Toggle caméra
-document.getElementById("toggle-video").addEventListener("click", async () => {
-  try {
-    if (!videoEnabled) {
-      const videoStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
-      if (!localStream) localStream = new MediaStream();
-      videoStream.getVideoTracks().forEach(track => localStream.addTrack(track));
-      videoEnabled = true;
-      document.getElementById("toggle-video").classList.add("active");
-      addVideo(localStream, "Moi");
-      for (let id in peers) peers[id].addTrack(videoStream.getVideoTracks()[0], localStream);
-    } else {
-      localStream.getVideoTracks().forEach(track => track.enabled = false);
-      videoEnabled = false;
-      document.getElementById("toggle-video").classList.remove("active");
-      addVideo(localStream, "Moi");
+    // Créer PeerConnection
+    function createPeerConnection(id) {
+      const pc = new RTCPeerConnection(configuration);
+      pc.onicecandidate = e => {
+        if (e.candidate) socket.emit("signal", { to: id, data: { candidate: e.candidate } });
+      };
+      pc.ontrack = e => addVideo(e.streams[0], id);
+      return pc;
     }
-  } catch (err) { alert("Impossible d’accéder à la caméra : " + err.message); }
-});
 
-// Toggle micro
-document.getElementById("toggle-audio").addEventListener("click", async () => {
-  try {
-    if (!audioEnabled) {
-      const audioStream = await navigator.mediaDevices.getUserMedia({ video:false, audio:true });
-      if (!localStream) localStream = new MediaStream();
-      audioStream.getAudioTracks().forEach(track => localStream.addTrack(track));
-      audioEnabled = true;
-      document.getElementById("toggle-audio").classList.add("active");
-      for (let id in peers) peers[id].addTrack(audioStream.getAudioTracks()[0], localStream);
-    } else {
-      localStream.getAudioTracks().forEach(track => track.enabled = false);
-      audioEnabled = false;
-      document.getElementById("toggle-audio").classList.remove("active");
-    }
-  } catch (err) { alert("Impossible d’accéder au micro : " + err.message); }
-});
-</script>
+    // Rejoindre room
+    socket.emit('join', room);
+
+    // Nouveau participant
+    socket.on("new-user", id => {
+      const pc = createPeerConnection(id);
+      peers[id] = pc;
+      if (localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      // Offre initiale
+      pc.createOffer().then(offer => {
+        pc.setLocalDescription(offer);
+        socket.emit("signal", { to: id, data: { sdp: pc.localDescription } });
+      });
+    });
+
+    // Signaling
+    socket.on("signal", async ({ from, data }) => {
+      let pc = peers[from];
+      if (!pc) {
+        pc = createPeerConnection(from);
+        peers[from] = pc;
+        if (localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      }
+
+      if (data.sdp) {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        if (data.sdp.type === "offer") {
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.emit("signal", { to: from, data: { sdp: pc.localDescription } });
+        }
+      } else if (data.candidate) {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      }
+    });
+
+    // Participant quitte
+    socket.on("user-left", id => {
+      if (peers[id]) { peers[id].close(); delete peers[id]; document.getElementById(id)?.remove(); }
+    });
+
+    // Toggle caméra
+    document.getElementById("toggle-video").addEventListener("click", async () => {
+      try {
+        if (!videoEnabled) {
+          const videoStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+          if (!localStream) localStream = new MediaStream();
+          videoStream.getVideoTracks().forEach(track => localStream.addTrack(track));
+          videoEnabled = true;
+          document.getElementById("toggle-video").classList.add("active");
+          addVideo(localStream, "Moi");
+          for (let id in peers) peers[id].addTrack(videoStream.getVideoTracks()[0], localStream);
+        } else {
+          localStream.getVideoTracks().forEach(track => track.enabled = false);
+          videoEnabled = false;
+          document.getElementById("toggle-video").classList.remove("active");
+          addVideo(localStream, "Moi");
+        }
+      } catch (err) { alert("Impossible d’accéder à la caméra : " + err.message); }
+    });
+
+    // Toggle micro
+    document.getElementById("toggle-audio").addEventListener("click", async () => {
+      try {
+        if (!audioEnabled) {
+          const audioStream = await navigator.mediaDevices.getUserMedia({ video:false, audio:true });
+          if (!localStream) localStream = new MediaStream();
+          audioStream.getAudioTracks().forEach(track => localStream.addTrack(track));
+          audioEnabled = true;
+          document.getElementById("toggle-audio").classList.add("active");
+          for (let id in peers) peers[id].addTrack(audioStream.getAudioTracks()[0], localStream);
+        } else {
+          localStream.getAudioTracks().forEach(track => track.enabled = false);
+          audioEnabled = false;
+          document.getElementById("toggle-audio").classList.remove("active");
+        }
+      } catch (err) { alert("Impossible d’accéder au micro : " + err.message); }
+    });
+  </script>
 </body>
 </html>
