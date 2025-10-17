@@ -16,7 +16,7 @@
   button:hover { background:#2980b9; }
   button.active { background:#2ecc71; }
   #videos { display: flex; justify-content: center; flex-wrap: wrap; gap:10px; }
-  video { width:0; height:0; border-radius: 10px; background: #000; transition: width 0.3s, height 0.3s; }
+  video { border-radius: 10px; background: #000; display: none; }
 </style>
 </head>
 <body>
@@ -39,7 +39,6 @@ async function init() {
   const room = location.pathname.split("/").pop() || "general";
   const socket = io();
 
-  // Ajouter vidéo
   function addVideo(stream, id) {
     let vid = document.getElementById(id);
     if (!vid) {
@@ -50,18 +49,18 @@ async function init() {
       document.getElementById("videos").appendChild(vid);
     }
     vid.srcObject = stream;
-    // Ajuste la taille uniquement si la caméra est activée
-    vid.style.width = videoEnabled ? '45%' : '0';
-    vid.style.height = videoEnabled ? 'auto' : '0';
+    // Affiche la vidéo uniquement si caméra activée
+    vid.style.display = videoEnabled ? 'inline-block' : 'none';
   }
 
-  // Créer PeerConnection
   function createPeerConnection(id) {
     const pc = new RTCPeerConnection();
     pc.onicecandidate = e => {
       if (e.candidate) socket.emit("signal", { to: id, data: { candidate: e.candidate } });
     };
-    pc.ontrack = e => addVideo(e.streams[0], id);
+    pc.ontrack = e => {
+      addVideo(e.streams[0], id);
+    };
     return pc;
   }
 
@@ -90,16 +89,16 @@ async function init() {
     if (peers[id]) { peers[id].close(); delete peers[id]; document.getElementById(id)?.remove(); }
   });
 
-  // Bouton caméra
+  // Toggle caméra
   document.getElementById("toggle-video").addEventListener("click", async () => {
     try {
       if (!videoEnabled) {
         const videoStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
         if (!localStream) localStream = new MediaStream();
         videoStream.getVideoTracks().forEach(track => localStream.addTrack(track));
-        addVideo(localStream, "Moi");
         videoEnabled = true;
         document.getElementById("toggle-video").classList.add("active");
+        addVideo(localStream, "Moi");
         socket.emit("join", room);
       } else {
         // Désactiver la caméra
@@ -113,16 +112,16 @@ async function init() {
     }
   });
 
-  // Bouton micro
+  // Toggle micro
   document.getElementById("toggle-audio").addEventListener("click", async () => {
     try {
       if (!audioEnabled) {
         const audioStream = await navigator.mediaDevices.getUserMedia({ video:false, audio:true });
         if (!localStream) localStream = new MediaStream();
         audioStream.getAudioTracks().forEach(track => localStream.addTrack(track));
-        addVideo(localStream, "Moi");
         audioEnabled = true;
         document.getElementById("toggle-audio").classList.add("active");
+        addVideo(localStream, "Moi");
         socket.emit("join", room);
       } else {
         // Désactiver le micro
