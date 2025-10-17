@@ -5,44 +5,57 @@
 <title>Chat Vidéo</title>
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <style>
-  body { font-family: sans-serif; text-align: center; background: #f2f2f2; }
-  video { width: 45%; margin: 5px; border-radius: 10px; background: #000; }
-  #videos { display: flex; justify-content: center; flex-wrap: wrap; }
-  button { padding: 10px 20px; margin: 5px; font-size: 16px; cursor: pointer; }
+  body { font-family: sans-serif; text-align: center; background: #f2f2f2; margin:0; padding:20px; }
+  h2 { color: #e74c3c; }
+  #controls { margin-bottom: 10px; }
+  button { 
+    padding: 10px 15px; margin: 5px; font-size: 16px; cursor: pointer; 
+    border:none; border-radius:5px; background:#3498db; color:white;
+    transition: 0.3s;
+  }
+  button:hover { background:#2980b9; }
+  button.active { background:#2ecc71; }
+  #videos { display: flex; justify-content: center; flex-wrap: wrap; gap:10px; }
+  video { width:0; height:0; border-radius: 10px; background: #000; transition: width 0.3s, height 0.3s; }
 </style>
 </head>
 <body>
 <h2><span style='color:red'>K</span>atakit : Chat Web</h2>
 
-<!-- Boutons pour activer caméra et micro -->
-<div>
-  <button id="start-video">Activer la caméra</button>
-  <button id="start-audio">Activer le micro</button>
+<div id="controls">
+  <button id="toggle-video">Activer la caméra</button>
+  <button id="toggle-audio">Activer le micro</button>
 </div>
 
-<!-- Zone où les vidéos apparaissent -->
 <div id="videos"></div>
 
 <script>
 let localStream = null;
+let videoEnabled = false;
+let audioEnabled = false;
 
 async function init() {
   const peers = {};
   const room = location.pathname.split("/").pop() || "general";
   const socket = io();
 
-  // Fonction pour afficher une vidéo
+  // Ajouter vidéo
   function addVideo(stream, id) {
-    if (document.getElementById(id)) return;
-    const vid = document.createElement("video");
-    vid.id = id;
+    let vid = document.getElementById(id);
+    if (!vid) {
+      vid = document.createElement("video");
+      vid.id = id;
+      vid.autoplay = true;
+      if (id === "Moi") vid.muted = true;
+      document.getElementById("videos").appendChild(vid);
+    }
     vid.srcObject = stream;
-    vid.autoplay = true;
-    if (id === "Moi") vid.muted = true;
-    document.getElementById("videos").appendChild(vid);
+    // Ajuste la taille uniquement si la caméra est activée
+    vid.style.width = videoEnabled ? '45%' : '0';
+    vid.style.height = videoEnabled ? 'auto' : '0';
   }
 
-  // Créer PeerConnection pour un utilisateur
+  // Créer PeerConnection
   function createPeerConnection(id) {
     const pc = new RTCPeerConnection();
     pc.onicecandidate = e => {
@@ -52,14 +65,12 @@ async function init() {
     return pc;
   }
 
-  // Nouvel utilisateur rejoint le salon
   socket.on("new-user", id => {
     const pc = createPeerConnection(id);
     peers[id] = pc;
     if (localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
   });
 
-  // Gestion des signaux WebRTC
   socket.on("signal", async ({ from, data }) => {
     let pc = peers[from];
     if (!pc) pc = createPeerConnection(from);
@@ -75,45 +86,57 @@ async function init() {
     }
   });
 
-  // Un utilisateur quitte
   socket.on("user-left", id => {
-    if (peers[id]) {
-      peers[id].close();
-      delete peers[id];
-      document.getElementById(id)?.remove();
-    }
+    if (peers[id]) { peers[id].close(); delete peers[id]; document.getElementById(id)?.remove(); }
   });
 
   // Bouton caméra
-  document.getElementById("start-video").addEventListener("click", async () => {
+  document.getElementById("toggle-video").addEventListener("click", async () => {
     try {
-      const videoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      if (!localStream) localStream = new MediaStream();
-      videoStream.getVideoTracks().forEach(track => localStream.addTrack(track));
-      addVideo(localStream, "Moi");
-      socket.emit("join", room);
+      if (!videoEnabled) {
+        const videoStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+        if (!localStream) localStream = new MediaStream();
+        videoStream.getVideoTracks().forEach(track => localStream.addTrack(track));
+        addVideo(localStream, "Moi");
+        videoEnabled = true;
+        document.getElementById("toggle-video").classList.add("active");
+        socket.emit("join", room);
+      } else {
+        // Désactiver la caméra
+        localStream.getVideoTracks().forEach(track => track.enabled = false);
+        videoEnabled = false;
+        document.getElementById("toggle-video").classList.remove("active");
+        addVideo(localStream, "Moi");
+      }
     } catch (err) {
       alert("Impossible d’accéder à la caméra : " + err.message);
     }
   });
 
   // Bouton micro
-  document.getElementById("start-audio").addEventListener("click", async () => {
+  document.getElementById("toggle-audio").addEventListener("click", async () => {
     try {
-      const audioStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-      if (!localStream) localStream = new MediaStream();
-      audioStream.getAudioTracks().forEach(track => localStream.addTrack(track));
-      addVideo(localStream, "Moi");
-      socket.emit("join", room);
+      if (!audioEnabled) {
+        const audioStream = await navigator.mediaDevices.getUserMedia({ video:false, audio:true });
+        if (!localStream) localStream = new MediaStream();
+        audioStream.getAudioTracks().forEach(track => localStream.addTrack(track));
+        addVideo(localStream, "Moi");
+        audioEnabled = true;
+        document.getElementById("toggle-audio").classList.add("active");
+        socket.emit("join", room);
+      } else {
+        // Désactiver le micro
+        localStream.getAudioTracks().forEach(track => track.enabled = false);
+        audioEnabled = false;
+        document.getElementById("toggle-audio").classList.remove("active");
+      }
     } catch (err) {
       alert("Impossible d’accéder au micro : " + err.message);
     }
   });
 }
 
-// Démarre le chat
 init().catch(err => alert("Erreur : " + err.message));
 </script>
-
 </body>
 </html>
