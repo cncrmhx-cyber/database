@@ -6,8 +6,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Servir les fichiers statiques (index.html)
-app.use(express.static(__dirname));
+// Servir le dossier public
+app.use(express.static('public'));
 
 const rooms = {};
 
@@ -19,10 +19,10 @@ io.on('connection', socket => {
     if (!rooms[room]) rooms[room] = [];
     rooms[room].push(socket.id);
 
-    // Notifier les autres dans la room
+    // Notifier les autres utilisateurs
     socket.to(room).emit('new-user', socket.id);
 
-    // Quand un utilisateur se déconnecte
+    // Déconnexion
     socket.on('disconnect', () => {
       rooms[room] = rooms[room].filter(id => id !== socket.id);
       socket.to(room).emit('user-left', socket.id);
