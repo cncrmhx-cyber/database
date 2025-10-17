@@ -8,24 +8,30 @@
   body { font-family: sans-serif; text-align: center; background: #f2f2f2; }
   video { width: 45%; margin: 5px; border-radius: 10px; background: #000; }
   #videos { display: flex; justify-content: center; flex-wrap: wrap; }
+  button { padding: 10px 20px; margin: 5px; font-size: 16px; cursor: pointer; }
 </style>
 </head>
 <body>
 <h2><span style='color:red'>K</span>atakit : Chat Web</h2>
 
+<!-- Boutons pour activer caméra et micro -->
+<div>
+  <button id="start-video">Activer la caméra</button>
+  <button id="start-audio">Activer le micro</button>
+</div>
 
+<!-- Zone où les vidéos apparaissent -->
 <div id="videos"></div>
+
 <script>
- let localStream = null;
+let localStream = null;
 
 async function init() {
   const peers = {};
-
-  // Déclare le room et le socket
   const room = location.pathname.split("/").pop() || "general";
   const socket = io();
 
-  // Ajouter vidéo
+  // Fonction pour afficher une vidéo
   function addVideo(stream, id) {
     if (document.getElementById(id)) return;
     const vid = document.createElement("video");
@@ -36,17 +42,17 @@ async function init() {
     document.getElementById("videos").appendChild(vid);
   }
 
-  // Fonction pour créer un PeerConnection
+  // Créer PeerConnection pour un utilisateur
   function createPeerConnection(id) {
     const pc = new RTCPeerConnection();
-    pc.onicecandidate = e => { 
-      if (e.candidate) socket.emit("signal", { to: id, data: { candidate: e.candidate } }); 
+    pc.onicecandidate = e => {
+      if (e.candidate) socket.emit("signal", { to: id, data: { candidate: e.candidate } });
     };
     pc.ontrack = e => addVideo(e.streams[0], id);
     return pc;
   }
 
-  // Gestion des nouveaux utilisateurs
+  // Nouvel utilisateur rejoint le salon
   socket.on("new-user", id => {
     const pc = createPeerConnection(id);
     peers[id] = pc;
@@ -69,7 +75,7 @@ async function init() {
     }
   });
 
-  // Déconnexion d’un utilisateur
+  // Un utilisateur quitte
   socket.on("user-left", id => {
     if (peers[id]) {
       peers[id].close();
@@ -105,9 +111,9 @@ async function init() {
   });
 }
 
-// Appelle init() à la fin du script
+// Démarre le chat
 init().catch(err => alert("Erreur : " + err.message));
-
 </script>
+
 </body>
 </html>
