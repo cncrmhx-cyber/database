@@ -1,39 +1,13 @@
 const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
+const path = require('path');
 
-// Servir le dossier public
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
-const rooms = {};
-
-io.on('connection', socket => {
-  console.log('Nouvel utilisateur connecté');
-
-  socket.on('join', room => {
-    socket.join(room);
-    if (!rooms[room]) rooms[room] = [];
-    rooms[room].push(socket.id);
-
-    // Notifier les autres utilisateurs
-    socket.to(room).emit('new-user', socket.id);
-
-    // Déconnexion
-    socket.on('disconnect', () => {
-      rooms[room] = rooms[room].filter(id => id !== socket.id);
-      socket.to(room).emit('user-left', socket.id);
-    });
-
-    // Signaling
-    socket.on('signal', ({ to, data }) => {
-      io.to(to).emit('signal', { from: socket.id, data });
-    });
-  });
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(3000, () => {
+  console.log('Serveur démarré sur http://localhost:3000');
+});
